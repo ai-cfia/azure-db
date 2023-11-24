@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass
 
+from azure.core.exceptions import AzureError
 from azure.search.documents import SearchClient
 
 
@@ -80,6 +81,6 @@ def search(query, config: AzureIndexSearchConfig):
         )
         transformed_results = [transform_result(result) for result in search_results]
         return transformed_results
-    except Exception as e:
+    except AzureError as e:
         logging.error(f"Search operation failed: {e}", exc_info=True)
         raise AzureIndexSearchQueryError from e

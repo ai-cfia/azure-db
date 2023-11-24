@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from unittest.mock import Mock, patch
 
 from index_search import (
+    AzureError,
     AzureIndexSearchQueryError,
     EmptyQueryError,
     search,
@@ -59,12 +60,14 @@ class TestAzureSearch(unittest.TestCase):
             "url": "http://example.com",
             "score": 1.23,
             "title": "Example Title",
-            "content": "No content available",  # Expected default content
+            "content": "No content available",
             "subtitle": "Example Subtitle",
             "last_updated": "2023-01-01T00:00:00Z",
         }
         transformed_result_no_highlights = transform_result(mock_result_no_highlights)
-        self.assertEqual(transformed_result_no_highlights, expected_output_no_highlights)
+        self.assertEqual(
+            transformed_result_no_highlights, expected_output_no_highlights
+        )
 
     def test_search_documents_empty_query(self):
         with self.assertRaises(EmptyQueryError):
@@ -72,7 +75,7 @@ class TestAzureSearch(unittest.TestCase):
 
     @patch("index_search.logging")
     def test_search_documents_query_error(self, mock_logging):
-        self.config.client.search.side_effect = Exception("Search failed")
+        self.config.client.search.side_effect = AzureError("Search failed")
         with self.assertRaises(AzureIndexSearchQueryError):
             search("test_query", self.config)
         mock_logging.error.assert_called()
