@@ -18,9 +18,6 @@ class AzureIndexSearchConfig:
     """
     Configuration class for Azure Index Search.
 
-    This class holds the necessary configuration details required for setting up
-    and executing search queries against an Azure Cognitive Search index.
-
     Attributes:
         client (SearchClient): An instance of `SearchClient` from the
         `azure.search.documents` package. This is the only mandatory field.
