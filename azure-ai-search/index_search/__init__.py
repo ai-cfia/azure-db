@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from azure.core.exceptions import AzureError
 from azure.search.documents import SearchClient
@@ -29,6 +29,9 @@ class AzureIndexSearchConfig:
         which to perform hit highlighting.
         highlight_tag (str): The HTML tag used to highlight search hits in the
         result snippets. If not provided, defaults to 'em'.
+        result_transform_map (dict, optional): A dictionary defining the mapping for
+        transforming the search results. Keys are new field names, and values are
+        paths in the result dictionary.
 
     Example:
         config = AzureIndexSearchConfig(
@@ -37,7 +40,12 @@ class AzureIndexSearchConfig:
             api_key="your-api-key",
             index_name="your-index-name",
             highlight_fields="content",
-            highlight_tag="strong"
+            highlight_tag="strong",
+            result_transform_map={
+                "title": "metadata_storage_name",
+                "content": "content"
+                # More mappings...
+            }
         )
     """
 
@@ -47,21 +55,55 @@ class AzureIndexSearchConfig:
     index_name: str | None = None
     highlight_fields: str | None = None
     highlight_tag: str = "em"
-
-
-def transform_result(result):
-    content_highlights = (result["@search.highlights"] or {}).get(
-        "content", ["No content available"]
+    result_transform_map: dict = field(
+        default_factory=lambda: {
+            "id": "/id",
+            "title": "/title",
+            "score": "/@search.score",
+            "subtitle": "/subtitle",
+            "url": "/url",
+            "content": "/@search.highlights/content/0",
+            "last_updated": "/last_updated",
+        }
     )
-    return {
-        "id": result.get("id"),
-        "url": result.get("url"),
-        "score": result.get("@search.score"),
-        "title": result.get("metadata_storage_name"),
-        "content": content_highlights[0],
-        "subtitle": result.get("subtitle"),
-        "last_updated": result.get("metadata_last_modified"),
-    }
+
+
+def get_value_by_nested_path(data_dict, nested_path):
+    """
+    Retrieves a value from a nested data structure.
+
+    Args:
+        data_dict (dict): The dictionary from which to retrieve the value.
+        nested_path (str): The path to the desired value, expressed as a
+                           string with elements separated by '/'.
+
+    Returns:
+        The value found at the specified path, or None if the path is invalid.
+    """
+    path_elements = nested_path.split("/")
+    for element in path_elements:
+        if not element:
+            continue
+        if element.isdigit() and isinstance(data_dict, list):
+            index = int(element)
+            if index < len(data_dict):
+                data_dict = data_dict[index]
+            else:
+                return None
+        elif isinstance(data_dict, dict) and element in data_dict:
+            data_dict = data_dict[element]
+        else:
+            return None
+    return data_dict
+
+
+def transform(source_dict, path_map):
+    if path_map is None:
+        return {}
+    transformed_dict = {}
+    for new_key, nested_path in path_map.items():
+        transformed_dict[new_key] = get_value_by_nested_path(source_dict, nested_path)
+    return transformed_dict
 
 
 def search(query, config: AzureIndexSearchConfig):
@@ -76,7 +118,8 @@ def search(query, config: AzureIndexSearchConfig):
             highlight_pre_tag=f"<{config.highlight_tag}>",
             highlight_post_tag=f"</{config.highlight_tag}>",
         )
-        transformed_results = [transform_result(result) for result in search_results]
+        map = config.result_transform_map
+        transformed_results = [transform(result, map) for result in search_results]
         return transformed_results
     except AzureError as e:
         logging.error(f"Search operation failed: {e}", exc_info=True)
