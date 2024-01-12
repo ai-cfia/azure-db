@@ -6,7 +6,6 @@ from index_search import (
     AzureError,
     AzureIndexSearchQueryError,
     EmptyQueryError,
-    get_value_by_nested_path,
     search,
     transform,
 )
@@ -32,55 +31,6 @@ class TestAzureSearch(unittest.TestCase):
     def setUp(self):
         self.config = TestAzureSearchConfig()
         self.config.client.search = Mock()
-
-    def test_get_value_by_nested_path(self):
-        data = {
-            "level1": {
-                "level2": {"key": "value"},
-                "list": [1, 2, {"nested_key": "nested_value"}],
-                "empty_list": [],
-            },
-            "empty": {},
-            "none": None,
-            "": {"key": "root level key"},
-        }
-        # Testing valid nested key access
-        self.assertEqual(get_value_by_nested_path(data, "/level1/level2/key"), "value")
-        # Testing valid access to a nested key in a list
-        self.assertEqual(
-            get_value_by_nested_path(data, "/level1/list/2/nested_key"), "nested_value"
-        )
-        # Testing a path leading to a missing key
-        self.assertIsNone(get_value_by_nested_path(data, "/level1/missing"))
-        # Testing a path leading to a missing key in an empty dict
-        self.assertIsNone(get_value_by_nested_path(data, "/empty/missing"))
-        # Testing a path leading to a missing key in a None value
-        self.assertIsNone(get_value_by_nested_path(data, "/none/missing"))
-        # Testing access to the first element in a list
-        self.assertEqual(get_value_by_nested_path(data, "/level1/list/0"), 1)
-        # Testing access to a non-existent index in a list
-        self.assertIsNone(get_value_by_nested_path(data, "/level1/list/10"))
-        # Testing path leading directly to a list
-        self.assertEqual(
-            get_value_by_nested_path(data, "/level1/list"),
-            [1, 2, {"nested_key": "nested_value"}],
-        )
-        # Testing a non-digit character in list index
-        self.assertIsNone(get_value_by_nested_path(data, "/level1/list/a"))
-        # Testing path leading to an empty list then attempting to access an index
-        self.assertIsNone(get_value_by_nested_path(data, "/level1/empty_list/0"))
-        # Testing paths with unnecessary leading or trailing delimiters
-        self.assertEqual(get_value_by_nested_path(data, "/level1/level2/key/"), "value")
-        # Testing path with consecutive delimiters without a key in between
-        self.assertIsNone(get_value_by_nested_path(data, "/level1//key"))
-        # Testing list as the first argument
-        self.assertEqual(get_value_by_nested_path(["not", "a", "dict"], "0"), "not")
-        # Testing path leading to the root of the data
-        self.assertEqual(get_value_by_nested_path(data, "/"), data)
-        self.assertEqual(get_value_by_nested_path(data, ""), data)
-        self.assertEqual(get_value_by_nested_path(data, "//"), data)
-        # Testing None as data
-        self.assertIsNone(get_value_by_nested_path(None, "/level1//key"))
 
     def test_transform(self):
         source_dict = {

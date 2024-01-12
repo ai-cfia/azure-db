@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass, field
 from urllib.parse import unquote
 
+import dpath
 from azure.core.exceptions import AzureError
 from azure.search.documents import SearchClient
 
@@ -69,45 +70,21 @@ class AzureIndexSearchConfig:
     )
 
 
-def get_value_by_nested_path(data_dict, nested_path):
-    """
-    Retrieves a value from a nested data structure.
-
-    Args:
-        data_dict (dict): The dictionary from which to retrieve the value.
-        nested_path (str): The path to the desired value, expressed as a
-                           string with elements separated by '/'.
-
-    Returns:
-        The value found at the specified path, or None if the path is invalid.
-    """
-    path_elements = nested_path.split("/")
-    for element in path_elements:
-        if not element:
-            continue
-        if element.isdigit() and isinstance(data_dict, list):
-            index = int(element)
-            if index < len(data_dict):
-                data_dict = data_dict[index]
-            else:
-                return None
-        elif isinstance(data_dict, dict) and element in data_dict:
-            data_dict = data_dict[element]
-        else:
-            return None
-    return data_dict
-
-
 def transform(source_dict, path_map):
     if path_map is None:
         return {}
+
     transformed_dict = {}
-    for new_key, nested_path in path_map.items():
-        value = get_value_by_nested_path(source_dict, nested_path)
+    for new_key, path in path_map.items():
+        try:
+            value = dpath.get(source_dict, path)
+        except (KeyError, ValueError):
+            value = None
         # Title is currently URL-encoded to avoid errors in the blob storage
         if new_key == "title":
             value = unquote(value) if value is not None else value
         transformed_dict[new_key] = value
+
     return transformed_dict
 
 
