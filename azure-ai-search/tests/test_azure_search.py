@@ -4,8 +4,9 @@ from unittest.mock import Mock, patch
 
 from index_search import (
     AzureError,
-    AzureIndexSearchQueryError,
+    DataTransformError,
     EmptyQueryError,
+    SearchQueryError,
     search,
     transform,
 )
@@ -42,13 +43,11 @@ class TestAzureSearch(unittest.TestCase):
             "new_id": "/id",
             "nested_value": "/nested/key",
             "first_list_item": "/list/0",
-            "missing": "/nested/missing",
         }
         expected_dict = {
             "new_id": "123",
             "nested_value": "value",
             "first_list_item": "a",
-            "missing": None,
         }
         self.assertEqual(transform(source_dict, path_map), expected_dict)
 
@@ -58,13 +57,15 @@ class TestAzureSearch(unittest.TestCase):
             "metadata_storage_name": "Example%20Title%201",
             "@search.score": 2.1,
         }
-        path_map = self.config.result_transform_map
+        path_map = {
+            "new_id": "/id",
+            "title": "/metadata_storage_name",
+            "score": "/@search.score",
+        }
         expected_dict = {
             "new_id": "123",
             "title": "Example Title 1",
             "score": 2.1,
-            "content_highlight": None,
-            "last_updated": None,
         }
         self.assertEqual(transform(source_dict, path_map), expected_dict)
 
@@ -77,17 +78,12 @@ class TestAzureSearch(unittest.TestCase):
         source_dict = {"id": "123", "nested": {"key": "value"}}
         self.assertEqual(transform(source_dict, None), {})
 
-    def test_transform_with_empty_source_dict(self):
-        path_map = {"new_id": "/id", "nested_value": "/nested/key"}
-        self.assertEqual(
-            transform({}, path_map), {"new_id": None, "nested_value": None}
-        )
+    def test_transform_raises_data_transform_error(self):
+        source_dict = {"id": "123"}
+        invalid_path_map = {"invalid_key": "/nonexistent/path"}
 
-    def test_transform_with_none_source_dict(self):
-        path_map = {"new_id": "/id", "nested_value": "/nested/key"}
-        self.assertEqual(
-            transform(None, path_map), {"new_id": None, "nested_value": None}
-        )
+        with self.assertRaises(DataTransformError):
+            transform(source_dict, invalid_path_map)
 
     def test_search_documents_empty_query(self):
         with self.assertRaises(EmptyQueryError):
@@ -96,7 +92,7 @@ class TestAzureSearch(unittest.TestCase):
     @patch("index_search.logging")
     def test_search_documents_query_error(self, mock_logging):
         self.config.client.search.side_effect = AzureError("Search failed")
-        with self.assertRaises(AzureIndexSearchQueryError):
+        with self.assertRaises(SearchQueryError):
             search("test_query", self.config)
         mock_logging.error.assert_called()
 

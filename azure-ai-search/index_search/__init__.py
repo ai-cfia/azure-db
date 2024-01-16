@@ -7,12 +7,20 @@ from azure.core.exceptions import AzureError
 from azure.search.documents import SearchClient
 
 
-class AzureIndexSearchQueryError(Exception):
+class AzureIndexSearchError(Exception):
+    """Generic Azure Index Search error."""
+
+
+class SearchQueryError(AzureIndexSearchError):
     """Raised when the search operation fails."""
 
 
-class EmptyQueryError(Exception):
+class EmptyQueryError(AzureIndexSearchError):
     """Raised when the search query is empty."""
+
+
+class DataTransformError(AzureIndexSearchError):
+    """Raised when a data transformation fails."""
 
 
 @dataclass
@@ -78,8 +86,9 @@ def transform(source_dict, path_map):
     for new_key, path in path_map.items():
         try:
             value = dpath.get(source_dict, path)
-        except (KeyError, ValueError):
-            value = None
+        except (KeyError, ValueError) as e:
+            logging.error(f"Data transformation failed: {e}", exc_info=True)
+            raise DataTransformError from e
         # Title is currently URL-encoded to avoid errors in the blob storage
         if new_key == "title":
             value = unquote(value) if value is not None else value
@@ -105,4 +114,4 @@ def search(query, config: AzureIndexSearchConfig):
         return transformed_results
     except AzureError as e:
         logging.error(f"Search operation failed: {e}", exc_info=True)
-        raise AzureIndexSearchQueryError from e
+        raise SearchQueryError from e
