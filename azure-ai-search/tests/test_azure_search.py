@@ -1,21 +1,31 @@
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from unittest.mock import Mock, patch
 
 from index_search import (
     AzureError,
-    AzureIndexSearchQueryError,
+    DataTransformError,
     EmptyQueryError,
+    SearchQueryError,
     search,
-    transform_result,
+    transform,
 )
 
 
 @dataclass
 class TestAzureSearchConfig:
-    client = Mock()
-    highlight_fields = "content"
-    highlight_tag = "em"
+    client: Mock = Mock()
+    highlight_fields: str = "content"
+    highlight_tag: str = "em"
+    result_transform_map: dict = field(
+        default_factory=lambda: {
+            "new_id": "/id",
+            "title": "/metadata_storage_name",
+            "score": "/@search.score",
+            "content_highlight": "/@search.highlights/content/0",
+            "last_updated": "/metadata_last_modified",
+        }
+    )
 
 
 class TestAzureSearch(unittest.TestCase):
@@ -23,51 +33,57 @@ class TestAzureSearch(unittest.TestCase):
         self.config = TestAzureSearchConfig()
         self.config.client.search = Mock()
 
-    def test_transform_result(self):
-        mock_result = {
+    def test_transform(self):
+        source_dict = {
             "id": "123",
-            "url": "http://example.com",
-            "@search.score": 1.23,
-            "metadata_storage_name": "Example Title",
-            "@search.highlights": {"content": ["Highlighted content"]},
-            "subtitle": "Example Subtitle",
-            "metadata_last_modified": "2023-01-01T00:00:00Z",
+            "nested": {"key": "value", "list": [1, 2, 3]},
+            "list": ["a", "b", "c"],
         }
-        expected_output = {
-            "id": "123",
-            "url": "http://example.com",
-            "score": 1.23,
-            "title": "Example Title",
-            "content": "Highlighted content",
-            "subtitle": "Example Subtitle",
-            "last_updated": "2023-01-01T00:00:00Z",
+        path_map = {
+            "new_id": "/id",
+            "nested_value": "/nested/key",
+            "first_list_item": "/list/0",
         }
-        transformed_result = transform_result(mock_result)
-        self.assertEqual(transformed_result, expected_output)
+        expected_dict = {
+            "new_id": "123",
+            "nested_value": "value",
+            "first_list_item": "a",
+        }
+        self.assertEqual(transform(source_dict, path_map), expected_dict)
 
-    def test_transform_result_no_highlights(self):
-        mock_result_no_highlights = {
+    def test_transform_decodes_title_field(self):
+        source_dict = {
             "id": "123",
-            "url": "http://example.com",
-            "@search.score": 1.23,
-            "metadata_storage_name": "Example Title",
-            "@search.highlights": None,
-            "subtitle": "Example Subtitle",
-            "metadata_last_modified": "2023-01-01T00:00:00Z",
+            "metadata_storage_name": "Example%20Title%201",
+            "@search.score": 2.1,
         }
-        expected_output_no_highlights = {
-            "id": "123",
-            "url": "http://example.com",
-            "score": 1.23,
-            "title": "Example Title",
-            "content": "No content available",
-            "subtitle": "Example Subtitle",
-            "last_updated": "2023-01-01T00:00:00Z",
+        path_map = {
+            "new_id": "/id",
+            "title": "/metadata_storage_name",
+            "score": "/@search.score",
         }
-        transformed_result_no_highlights = transform_result(mock_result_no_highlights)
-        self.assertEqual(
-            transformed_result_no_highlights, expected_output_no_highlights
-        )
+        expected_dict = {
+            "new_id": "123",
+            "title": "Example Title 1",
+            "score": 2.1,
+        }
+        self.assertEqual(transform(source_dict, path_map), expected_dict)
+
+    def test_transform_with_empty_path_map(self):
+        source_dict = {"id": "123", "nested": {"key": "value"}}
+        empty_path_map = {}
+        self.assertEqual(transform(source_dict, empty_path_map), {})
+
+    def test_transform_with_none_path_map(self):
+        source_dict = {"id": "123", "nested": {"key": "value"}}
+        self.assertEqual(transform(source_dict, None), {})
+
+    def test_transform_raises_data_transform_error(self):
+        source_dict = {"id": "123"}
+        invalid_path_map = {"invalid_key": "/nonexistent/path"}
+
+        with self.assertRaises(DataTransformError):
+            transform(source_dict, invalid_path_map)
 
     def test_search_documents_empty_query(self):
         with self.assertRaises(EmptyQueryError):
@@ -76,7 +92,7 @@ class TestAzureSearch(unittest.TestCase):
     @patch("index_search.logging")
     def test_search_documents_query_error(self, mock_logging):
         self.config.client.search.side_effect = AzureError("Search failed")
-        with self.assertRaises(AzureIndexSearchQueryError):
+        with self.assertRaises(SearchQueryError):
             search("test_query", self.config)
         mock_logging.error.assert_called()
 
@@ -95,7 +111,15 @@ class TestAzureSearch(unittest.TestCase):
         self.config.client.search.return_value = iter(mock_search_results)
         self.config.highlight_fields = "content"
         results = search("valid_query", self.config)
-        expected_output = [transform_result(result) for result in mock_search_results]
+        expected_output = [
+            {
+                "new_id": "1",
+                "title": "Example Title 1",
+                "score": 2.1,
+                "content_highlight": "Highlighted Content 1",
+                "last_updated": "2023-01-01T00:00:00Z",
+            }
+        ]
         self.assertEqual(results, expected_output)
 
 
