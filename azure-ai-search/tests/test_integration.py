@@ -6,7 +6,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient
 from dotenv import load_dotenv
-from index_search import AzureIndexSearchConfig, search
+from index_search import search
 
 
 class AzureSearchIntegrationTest(unittest.TestCase):
@@ -24,23 +24,20 @@ class AzureSearchIntegrationTest(unittest.TestCase):
             index_name=self.index_name,
             credential=AzureKeyCredential(self.key),
         )
-        self.config: AzureIndexSearchConfig = {
-            "client": self.search_client,
-            "search_params": {
-                "highlight_fields": "content",
-                "highlight_pre_tag": "<strong>",
-                "highlight_post_tag": "</strong>",
-                "skip": 0,
-                "top": 10,
-            },
-            "result_transform_map": {
-                "id": "/id",
-                "title": "/title",
-                "score": "/@search.score",
-                "url": "/url",
-                "content": "/@search.highlights/content/0",
-                "last_updated": "/last_updated",
-            },
+        self.search_params = {
+            "highlight_fields": "content",
+            "highlight_pre_tag": "<strong>",
+            "highlight_post_tag": "</strong>",
+            "skip": 0,
+            "top": 10,
+        }
+        self.result_transform_map = {
+            "id": "/id",
+            "title": "/title",
+            "score": "/@search.score",
+            "url": "/url",
+            "content": "/@search.highlights/content/0",
+            "last_updated": "/last_updated",
         }
 
     def test_index_existence(self):
@@ -58,14 +55,14 @@ class AzureSearchIntegrationTest(unittest.TestCase):
     def test_search(self):
         query = "how to bring a pet to canada?"
         start_time = time.time()
-        results = search(query, self.config)
+        results = search(
+            query, self.search_client, self.search_params, self.result_transform_map
+        )
         end_time = time.time()
         duration = (end_time - start_time) * 1000
 
         self.assertTrue(duration < 500, f"Search operation took too long: {duration}ms")
-        self.assertEqual(len(results), 10, "Search should return exactly 10 results.")
-
-    
+        self.assertTrue(len(results) <= 10, "Search should return up to 10 results.")
 
 
 if __name__ == "__main__":

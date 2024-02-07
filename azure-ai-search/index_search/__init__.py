@@ -1,5 +1,5 @@
 import logging
-from typing import TypedDict
+from typing import Any, Dict
 from urllib.parse import unquote
 
 import dpath
@@ -23,43 +23,7 @@ class DataTransformError(AzureIndexSearchError):
     """Raised when a data transformation fails."""
 
 
-class AzureIndexSearchConfig(TypedDict):
-    """
-    TypedDict for Azure Search Index configuration.
-
-    Attributes:
-        client: `SearchClient` instance for query execution.
-        search_params: Dict with search parameters.
-        result_transform_map: Dict for transforming search results using dpath.
-
-    Example:
-        config = AzureIndexSearchConfig(
-            client=SearchClient(...),
-            search_params={
-                "highlight_fields": "content",
-                "highlight_pre_tag": "<em>",
-                "highlight_post_tag": "</em>",
-                "skip": 0,
-                "top": 10
-            },
-            result_transform_map={
-                "id": "/id",
-                "title": "/title",
-                "score": "/@search.score",
-                "subtitle": "/subtitle",
-                "url": "/url",
-                "content": "/content",
-                "last_updated": "/last_updated",
-            }
-        )
-    """
-
-    client: SearchClient
-    search_params: dict
-    result_transform_map: dict
-
-
-def transform(source_dict, path_map):
+def transform(source_dict: Dict[str, Any], path_map: Dict[str, str]) -> Dict[str, Any]:
     if not path_map:
         return source_dict
 
@@ -78,16 +42,18 @@ def transform(source_dict, path_map):
     return transformed_dict
 
 
-def search(query, config: AzureIndexSearchConfig):
+def search(
+    query: str, client: SearchClient, search_params: dict, result_transform_map: dict
+):
     if not query:
         logging.error("Empty search query received")
         raise EmptyQueryError("Search query cannot be empty")
 
     try:
-        client: SearchClient = config["client"]
-        map = config["result_transform_map"]
-        search_results = client.search(search_text=query, **config["search_params"])
-        transformed_results = [transform(result, map) for result in search_results]
+        search_results = client.search(search_text=query, **search_params)
+        transformed_results = [
+            transform(result, result_transform_map) for result in search_results
+        ]
         return transformed_results
     except AzureError as e:
         logging.error(f"Search operation failed: {e}", exc_info=True)

@@ -3,7 +3,6 @@ from unittest.mock import Mock, patch
 
 from index_search import (
     AzureError,
-    AzureIndexSearchConfig,
     DataTransformError,
     EmptyQueryError,
     SearchQueryError,
@@ -14,18 +13,15 @@ from index_search import (
 
 class TestAzureSearch(unittest.TestCase):
     def setUp(self):
-        client = Mock()
-        client.search = Mock()
-        self.config: AzureIndexSearchConfig = {
-            "client": client,
-            "search_params": {},
-            "result_transform_map": {
-                "new_id": "/id",
-                "title": "/metadata_storage_name",
-                "score": "/@search.score",
-                "content_highlight": "/@search.highlights/content/0",
-                "last_updated": "/metadata_last_modified",
-            },
+        self.client = Mock()
+        self.client.search = Mock()
+        self.search_params = {}
+        self.result_transform_map = {
+            "new_id": "/id",
+            "title": "/metadata_storage_name",
+            "score": "/@search.score",
+            "content_highlight": "/@search.highlights/content/0",
+            "last_updated": "/metadata_last_modified",
         }
 
     def test_transform(self):
@@ -82,13 +78,15 @@ class TestAzureSearch(unittest.TestCase):
 
     def test_search_documents_empty_query(self):
         with self.assertRaises(EmptyQueryError):
-            search("", self.config)
+            search("", self.client, self.search_params, self.result_transform_map)
 
     @patch("index_search.logging")
     def test_search_documents_query_error(self, mock_logging):
-        self.config["client"].search.side_effect = AzureError("Search failed")
+        self.client.search.side_effect = AzureError("Search failed")
         with self.assertRaises(SearchQueryError):
-            search("test_query", self.config)
+            search(
+                "test_query", self.client, self.search_params, self.result_transform_map
+            )
         mock_logging.error.assert_called()
 
     def test_search_documents_success(self):
@@ -103,11 +101,11 @@ class TestAzureSearch(unittest.TestCase):
                 "metadata_last_modified": "2023-01-01T00:00:00Z",
             },
         ]
-        self.config["client"].search.return_value = iter(mock_search_results)
-        self.config["search_params"][
-            "highlight_fields"
-        ] = "content"  # Adjust to actual usage if necessary
-        results = search("valid_query", self.config)
+        self.client.search.return_value = iter(mock_search_results)
+        self.search_params["highlight_fields"] = "content"
+        results = search(
+            "valid_query", self.client, self.search_params, self.result_transform_map
+        )
         expected_output = [
             {
                 "new_id": "1",
