@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass, field
+from typing import TypedDict
 from urllib.parse import unquote
 
 import dpath
@@ -23,64 +23,45 @@ class DataTransformError(AzureIndexSearchError):
     """Raised when a data transformation fails."""
 
 
-@dataclass
-class AzureIndexSearchConfig:
+class AzureIndexSearchConfig(TypedDict):
     """
-    Configuration class for Azure Index Search.
+    TypedDict for Azure Search Index configuration.
 
     Attributes:
-        client (SearchClient): An instance of `SearchClient` from the
-        `azure.search.documents` package. This is the only mandatory field.
-        endpoint (str, optional): The endpoint URL of the Azure Search service.
-        api_key (str, optional): The API key for authenticating requests to the Azure
-        Search service.
-        index_name (str, optional): The name of the Azure Search index to query.
-        highlight_fields (str, optional): A comma-separated string of field names on
-        which to perform hit highlighting.
-        highlight_tag (str): The HTML tag used to highlight search hits in the
-        result snippets. If not provided, defaults to 'em'.
-        result_transform_map (dict, optional): A dictionary defining the mapping for
-        transforming the search results. Keys are new field names, and values are
-        paths in the result dictionary.
+        client: `SearchClient` instance for query execution.
+        search_params: Dict with search parameters.
+        result_transform_map: Dict for transforming search results using dpath.
 
     Example:
         config = AzureIndexSearchConfig(
             client=SearchClient(...),
-            endpoint="https://your-service-name.search.windows.net/",
-            api_key="your-api-key",
-            index_name="your-index-name",
-            highlight_fields="content",
-            highlight_tag="strong",
+            search_params={
+                "highlight_fields": "content",
+                "highlight_pre_tag": "<em>",
+                "highlight_post_tag": "</em>",
+                "skip": 0,
+                "top": 10
+            },
             result_transform_map={
-                "title": "metadata_storage_name",
-                "content": "content"
-                # More mappings...
+                "id": "/id",
+                "title": "/title",
+                "score": "/@search.score",
+                "subtitle": "/subtitle",
+                "url": "/url",
+                "content": "/content",
+                "last_updated": "/last_updated",
             }
         )
     """
 
     client: SearchClient
-    endpoint: str | None = None
-    api_key: str | None = None
-    index_name: str | None = None
-    highlight_fields: str | None = None
-    highlight_tag: str = "em"
-    result_transform_map: dict = field(
-        default_factory=lambda: {
-            "id": "/id",
-            "title": "/title",
-            "score": "/@search.score",
-            "subtitle": "/subtitle",
-            "url": "/url",
-            "content": "/@search.highlights/content/0",
-            "last_updated": "/last_updated",
-        }
-    )
+    search_params: dict
+    result_transform_map: dict
 
 
 def transform(source_dict, path_map):
-    if path_map is None:
-        return {}
+    if not path_map:
+        return source_dict
 
     transformed_dict = {}
     for new_key, path in path_map.items():
@@ -103,13 +84,9 @@ def search(query, config: AzureIndexSearchConfig):
         raise EmptyQueryError("Search query cannot be empty")
 
     try:
-        search_results = config.client.search(
-            search_text=query,
-            highlight_fields=config.highlight_fields,
-            highlight_pre_tag=f"<{config.highlight_tag}>",
-            highlight_post_tag=f"</{config.highlight_tag}>",
-        )
-        map = config.result_transform_map
+        client: SearchClient = config["client"]
+        map = config["result_transform_map"]
+        search_results = client.search(search_text=query, **config["search_params"])
         transformed_results = [transform(result, map) for result in search_results]
         return transformed_results
     except AzureError as e:
