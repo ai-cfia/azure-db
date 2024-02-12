@@ -2,10 +2,9 @@
 
 ## Overview
 
-The `azure-ai-search` package facilitates querying Azure Search indices, 
-utilizing
-`SearchClient` from `azure.search.documents` with additional features for error
-handling and result transformation.
+The `azure-ai-search` package facilitates querying Azure Search indices,
+utilizing `SearchClient` from `azure.search.documents` with additional features
+for error handling and result transformation.
 
 ## Installation
 
@@ -17,43 +16,59 @@ pip install git+https://github.com/ai-cfia/azure-db.git@main#subdirectory=azure-
 
 ## Configuration
 
-Set up `AzureIndexSearchConfig` with your Azure Search service parameters.
+Prepare `AzureIndexSearchConfig` with necessary Azure Search service details to
+begin.
 
 ## Usage
 
-Instantiate `AzureIndexSearchConfig` and pass it to the `search` function with 
-your query.
+Create an `AzureIndexSearchConfig` instance and utilize it with the `search`
+function alongside your search query.
 
 ```python
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from azure_ai_search import search, AzureIndexSearchConfig
 
-# Initialize SearchClient
+# Set up the SearchClient
 client = SearchClient(
     endpoint="https://your-service-name.search.windows.net/",
     index_name="your-index-name",
     credential=AzureKeyCredential("your-api-key")
 )
 
-# Configure search
-config = AzureIndexSearchConfig(
-    client=client,
-    highlight_fields="content",
-    highlight_tag="strong"
-)
+# Search configuration
+config: AzureIndexSearchConfig = {
+    "client": client,
+    "search_params": {
+        "highlight_fields": "content",
+        "highlight_pre_tag": "<strong>",
+        "highlight_post_tag": "</strong>",
+        "skip": 0,
+        "top": 10
+    },
+    "result_transform_map": {
+        "id": "/id",
+        "title": "/title",
+        "score": "/@search.score",
+        "subtitle": "/subtitle",
+        "url": "/url",
+        "content": "/content",
+        "last_updated": "/last_updated",
+    }
+}
 
-# Perform search
+# Execute search
 results = search("example query", config)
 ```
 
 ## Exceptions
 
-- `AzureIndexSearchQueryError`
-- `EmptyQueryError`
+- `AzureIndexSearchError`: A generic error for search-related issues.
+- `SearchQueryError`: Triggered by failures during the search process.
+- `EmptyQueryError`: Raised for empty search queries.
+- `DataTransformError`: Occurs when transforming search results fails.
 
 ## Functions
 
-- `transform_result`
-- `search`
-
+- `transform`: Modifies search result data based on predefined mappings.
+- `search`: Executes search queries against Azure Search indices.

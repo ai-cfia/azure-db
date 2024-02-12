@@ -1,5 +1,4 @@
 import unittest
-from dataclasses import dataclass, field
 from unittest.mock import Mock, patch
 
 from index_search import (
@@ -12,26 +11,18 @@ from index_search import (
 )
 
 
-@dataclass
-class TestAzureSearchConfig:
-    client: Mock = Mock()
-    highlight_fields: str = "content"
-    highlight_tag: str = "em"
-    result_transform_map: dict = field(
-        default_factory=lambda: {
+class TestAzureSearch(unittest.TestCase):
+    def setUp(self):
+        self.client = Mock()
+        self.client.search = Mock()
+        self.search_params = {}
+        self.result_transform_map = {
             "new_id": "/id",
             "title": "/metadata_storage_name",
             "score": "/@search.score",
             "content_highlight": "/@search.highlights/content/0",
             "last_updated": "/metadata_last_modified",
         }
-    )
-
-
-class TestAzureSearch(unittest.TestCase):
-    def setUp(self):
-        self.config = TestAzureSearchConfig()
-        self.config.client.search = Mock()
 
     def test_transform(self):
         source_dict = {
@@ -72,11 +63,11 @@ class TestAzureSearch(unittest.TestCase):
     def test_transform_with_empty_path_map(self):
         source_dict = {"id": "123", "nested": {"key": "value"}}
         empty_path_map = {}
-        self.assertEqual(transform(source_dict, empty_path_map), {})
+        self.assertEqual(transform(source_dict, empty_path_map), source_dict)
 
     def test_transform_with_none_path_map(self):
         source_dict = {"id": "123", "nested": {"key": "value"}}
-        self.assertEqual(transform(source_dict, None), {})
+        self.assertEqual(transform(source_dict, None), source_dict)
 
     def test_transform_raises_data_transform_error(self):
         source_dict = {"id": "123"}
@@ -87,13 +78,15 @@ class TestAzureSearch(unittest.TestCase):
 
     def test_search_documents_empty_query(self):
         with self.assertRaises(EmptyQueryError):
-            search("", self.config)
+            search("", self.client, self.search_params, self.result_transform_map)
 
     @patch("index_search.logging")
     def test_search_documents_query_error(self, mock_logging):
-        self.config.client.search.side_effect = AzureError("Search failed")
+        self.client.search.side_effect = AzureError("Search failed")
         with self.assertRaises(SearchQueryError):
-            search("test_query", self.config)
+            search(
+                "test_query", self.client, self.search_params, self.result_transform_map
+            )
         mock_logging.error.assert_called()
 
     def test_search_documents_success(self):
@@ -108,9 +101,11 @@ class TestAzureSearch(unittest.TestCase):
                 "metadata_last_modified": "2023-01-01T00:00:00Z",
             },
         ]
-        self.config.client.search.return_value = iter(mock_search_results)
-        self.config.highlight_fields = "content"
-        results = search("valid_query", self.config)
+        self.client.search.return_value = iter(mock_search_results)
+        self.search_params["highlight_fields"] = "content"
+        results = search(
+            "valid_query", self.client, self.search_params, self.result_transform_map
+        )
         expected_output = [
             {
                 "new_id": "1",
@@ -121,7 +116,3 @@ class TestAzureSearch(unittest.TestCase):
             }
         ]
         self.assertEqual(results, expected_output)
-
-
-if __name__ == "__main__":
-    unittest.main()
