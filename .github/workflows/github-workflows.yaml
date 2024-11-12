@@ -16,7 +16,7 @@ jobs:
       files: ${{ steps.changed-files.outputs.all_changed_files }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get Changed Files
         id: changed-files
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Trigger Release Workflow for azure-ai-search
         if: contains(needs.get-changed-files.outputs.files, 'azure-ai-search/setup.py')
