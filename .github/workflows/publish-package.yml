@@ -68,8 +68,11 @@ jobs:
           # Fetch the latest tag to use as reference
           latest_tag=$(git describe --tags --abbrev=0)
           
+          # Get the date of the latest tag and format it as a string
+          latest_tag_date=$(git log -1 --format=%ai "$latest_tag" | sed 's/.*/"&"/')
+
           # Get the list of merged PRs since the latest tag
-          pr_list=$(gh pr list --repo $GITHUB_REPOSITORY --state merged --base main --json number,title,url,mergedAt --jq ".[] | select(.mergedAt > $(git log -1 --format=%ai $latest_tag)) | .number")
+          pr_list=$(gh pr list --repo $GITHUB_REPOSITORY --state merged --base main --json number,title,url,mergedAt --jq ".[] | select(.mergedAt > $latest_tag_date) | .number")
           project_changelog=""
 
           for pr in $pr_list; do
@@ -77,14 +80,14 @@ jobs:
             files=$(gh pr view "$pr" --repo $GITHUB_REPOSITORY --json files --jq '.files[].path')
             
             # Check if the PR contains changes in the specified package-name folder
-            if echo "$files" | grep -q "^${{ inputs.package-name }}/"; then
+            if echo "$files" | grep -q "^azure-ai-search/"; then
               pr_info=$(gh pr view "$pr" --repo $GITHUB_REPOSITORY --json title,url | jq -r '"- \(.title) (\(.url))"')
               project_changelog="$project_changelog\n$pr_info"
             fi
           done
 
           if [ -n "$project_changelog" ]; then
-            changelog="Changelog:\n\n${{ inputs.package-name }}:\n$project_changelog"
+            changelog="Changelog:\n\nazure-ai-search:\n$project_changelog"
           else
             changelog="No significant changes."
           fi
