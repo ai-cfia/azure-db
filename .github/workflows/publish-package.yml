@@ -1,0 +1,106 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      package-name:
+        description: 'Package name (currently only azure-ai-search is supported)'
+        required: true
+        type: choice
+        options:
+          - azure-ai-search
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git for GitHub Actions
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Action"
+
+      - name: Parse version
+        id: parse_version
+        run: |
+          package_dir="${{ inputs.package-name }}"
+          if [[ -f "$package_dir/pyproject.toml" ]]; then
+            version=$(grep -Po '(?<=^version = ")[^"]*' "$package_dir/pyproject.toml")
+          elif [[ -f "$package_dir/setup.py" ]]; then
+            version=$(grep -Po '(?<=version=")[^"]*' "$package_dir/setup.py")
+          else
+            echo "No valid configuration file found for version extraction"
+            exit 1
+          fi
+          echo "version=$version" >> $GITHUB_ENV
+
+      - name: Switch to the release branch
+        run: |
+          git checkout -b ${{ inputs.package-name }}-${{ env.version }}
+          git push -u origin ${{ inputs.package-name }}-${{ env.version }}
+
+          
+      - name: Remove unnecessary files from release branch
+        run: |
+          find . -path "./.git" -prune -o -type f ! -name "pyproject.toml" ! -name "setup.py"  ! -name "requirements.txt" ! -path "./${{ inputs.package-name }}/*" -exec rm -f {} +
+          find . -type d \( -path "./.git" -o -path "./${{ inputs.package-name }}" \) -prune -o -type d ! -path "." -exec rm -rf {} +
+
+
+      - name: Add cleaned package to release branch
+        run: |
+          git add .
+          git commit -m "Prepare release for version ${{ env.version }}"
+          git push origin HEAD
+
+      - name: Tag the clean version on the release branch
+        run: |
+          git tag -a v${{ env.version }}-${{ inputs.package-name }} -m "Release ${{ env.version }}"
+          git push origin v${{ env.version }}-${{ inputs.package-name }}
+
+      - name: Generate changelog from PRs since last tag
+        id: generate_changelog
+        run: |
+          # Fetch the latest tag to use as reference
+          latest_tag=$(git describe --tags --abbrev=0)
+          
+          # Get the list of merged PRs since the latest tag
+          pr_list=$(gh pr list --repo $GITHUB_REPOSITORY --state merged --base main --json number,title,url,mergedAt --jq ".[] | select(.mergedAt > $(git log -1 --format=%ai $latest_tag)) | .number")
+          project_changelog=""
+
+          for pr in $pr_list; do
+            # Get the list of files changed in the PR
+            files=$(gh pr view "$pr" --repo $GITHUB_REPOSITORY --json files --jq '.files[].path')
+            
+            # Check if the PR contains changes in the specified package-name folder
+            if echo "$files" | grep -q "^${{ inputs.package-name }}/"; then
+              pr_info=$(gh pr view "$pr" --repo $GITHUB_REPOSITORY --json title,url | jq -r '"- \(.title) (\(.url))"')
+              project_changelog="$project_changelog\n$pr_info"
+            fi
+          done
+
+          if [ -n "$project_changelog" ]; then
+            changelog="Changelog:\n\n${{ inputs.package-name }}:\n$project_changelog"
+          else
+            changelog="No significant changes."
+          fi
+
+          echo -e "$changelog" > RELEASE_CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "v${{ env.version }}-${{ inputs.package-name }}"
+          name: "${{ inputs.package-name }} v${{ env.version }}"
+          bodyFile: "RELEASE_CHANGELOG.md"
+          allowUpdates: true
+          generateReleaseNotes: false
+          makeLatest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

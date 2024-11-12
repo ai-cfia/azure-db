@@ -14,7 +14,7 @@ def read_requirements():
 
 setup(
     name="azure-ai-search",
-    version="0.1.0",
+    version="0.1.1",
     packages=find_packages(),
     install_requires=read_requirements(),
     long_description=read_readme(),

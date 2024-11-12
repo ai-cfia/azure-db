@@ -1,10 +1,38 @@
-name: Dynamic Package Workflow
+---
+name: ai-cfia workflows
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types:
+      - opened
+      - closed
+      - synchronize
 
 jobs:
+  get-changed-files:
+    name: Get Changed Files
+    runs-on: ubuntu-latest
+    outputs:
+      files: ${{ steps.changed-files.outputs.all_changed_files }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get Changed Files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            azure-ai-search/**
+  azure-ai-search-version-bump:
+    needs: get-changed-files
+    if: github.event.pull_request.merged != true && contains(needs.get-changed-files.outputs.files, 'azure-ai-search/')
+    name: azure-ai-search-version-bump
+    uses: ai-cfia/github-workflows/.github/workflows/workflow-version-bump-python.yml@162-provide-support-for-version-bump-when-a-setuppy-file-is-used
+    secrets: inherit
+    with:
+      pyproject-path: 'azure-ai-search/setup.py'
+      package-name: 'azure-ai-search'
   list-packages:
     runs-on: ubuntu-latest
     outputs:
@@ -57,10 +85,26 @@ jobs:
 
   markdown-check:
     uses: ai-cfia/github-workflows/.github/workflows/workflow-markdown-check.yml@main
-    with:
-      config-file-path: ".mlc_config.json"
     secrets: inherit
 
   repo-standard:
     uses: ai-cfia/github-workflows/.github/workflows/workflow-repo-standards-validation.yml@main
     secrets: inherit
+
+  trigger-release:
+    name: Trigger release workflow
+    needs: get-changed-files
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Trigger Release Workflow for azure-ai-search
+        if: contains(needs.get-changed-files.outputs.files, 'azure-ai-search/setup.py')
+        run: |
+          gh workflow run publish-package.yml \
+          --ref main \
+          -f package-name=azure-ai-search
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
