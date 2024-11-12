@@ -64,3 +64,8 @@ jobs:
   repo-standard:
     uses: ai-cfia/github-workflows/.github/workflows/workflow-repo-standards-validation.yml@main
     secrets: inherit
+
+  trigger-release:
+    if: github.event.pull_request.merged == true
+    uses: ai-cfia/github-workflows/.github/workflows/workflow-pyproject-release.yml@main
+    secrets: inherit
