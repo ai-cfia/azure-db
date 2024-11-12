@@ -1,8 +1,12 @@
-name: Dynamic Package Workflow
+---
+name: ai-cfia workflows
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types:
+      - opened
+      - closed
+      - synchronize
 
 jobs:
   get-changed-files:
