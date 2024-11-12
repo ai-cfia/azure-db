@@ -28,7 +28,7 @@ jobs:
     needs: get-changed-files
     if: github.event.pull_request.merged != true && contains(needs.get-changed-files.outputs.files, 'azure-ai-search/')
     name: azure-ai-search-version-bump
-    uses: ai-cfia/github-workflows/.github/workflows/workflow-version-bump-python.yml@main
+    uses: ai-cfia/github-workflows/.github/workflows/workflow-version-bump-python.yml@162-provide-support-for-version-bump-when-a-setuppy-file-is-used
     secrets: inherit
     with:
       pyproject-path: 'azure-ai-search/setup.py'
