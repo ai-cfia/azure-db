@@ -16,7 +16,7 @@ jobs:
       files: ${{ steps.changed-files.outputs.all_changed_files }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get Changed Files
         id: changed-files
@@ -38,7 +38,7 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: set-matrix
         run: |
           echo "Finding package directories..."
@@ -53,7 +53,7 @@ jobs:
       matrix:
         package: ${{ fromJson(needs.list-packages.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Trigger Release Workflow for azure-ai-search
         if: contains(needs.get-changed-files.outputs.files, 'azure-ai-search/setup.py')
